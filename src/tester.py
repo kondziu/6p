@@ -14,6 +14,7 @@ TYPES = set(["image", "sound", "text"])
 
 # This should obviously be a config file.
 CLEAN_ANSWERS = True
+IGNORE_CASE = True
 REMOVE_FROM_ANSWERS = [ "?", "!", ",", ".", ";", ":" ]
 REWRITE_RULES = { "isn't": "is not", "aren't": "are not" }
 
@@ -50,7 +51,7 @@ class Item(object):
         return self._clean_answers
 
     def _clean(self, string):
-        return self._rewrite(self._remove_clutter(string.lower()))
+        return self._rewrite(self._remove_clutter(string.lower() if IGNORE_CASE else string))
 
     def _remove_clutter(self, string):
         clean_string = string
@@ -151,6 +152,59 @@ def read_test_file(path):
 
     return items
 
+class Scheduler(object):
+    def __init__(self, items=[]):
+        self._items = items
+        self._correct = 0
+        self._attempted = 0
+
+    @property
+    def attempted(self):
+        return self._attempted
+
+    @property
+    def correct(self):
+        return self._correct
+
+    @property
+    def todo(self):
+        return len(self._items)
+
+    @property
+    def current_item(self):
+        return self._items[0] if self._items else None
+
+    def next_item(self, correct=True):
+        if not self._items:
+            return None
+
+        del self._items[0]
+
+        if correct:
+            self._correct += 1
+        self._attempted += 1
+
+        return self.current_item
+
+    def cycle_item(self, correct=True):
+        if not self._items:
+            return None
+
+        item = self._items[0]
+        del self._items[0]
+        self._items.append(item)
+
+        if correct:
+            self._correct += 1
+        self._attempted += 1
+
+        return self.current_item
+
+    def append(self, items):
+        if isinstance(items, list):
+            self._items += items
+        else:
+            self._items.append(items)
 
 # Starts from here.
 if __name__ == '__main__':
