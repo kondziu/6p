@@ -19,13 +19,16 @@ REMOVE_FROM_ANSWERS = [ "?", "!", ",", ".", ";", ":" ]
 REWRITE_RULES = { "isn't": "is not", "aren't": "are not" }
 
 GRADE_SCALE = {
-    range(0,  49):  2.0,
-    range(50, 59):  3.0,
-    range(60, 69):  3.5,
-    range(70, 79):  4.0,
-    range(80, 89):  4.5,
-    range(90, 100): 5.0,
+    range(0,  50):  2.0,
+    range(50, 60):  3.0,
+    range(60, 70):  3.5,
+    range(70, 80):  4.0,
+    range(80, 90):  4.5,
+    range(90, 101): 5.0,
 }
+
+SHOW_HINTS = True
+SHOW_ANSWERS_ON_FAIL = True
 
 
 class Item(object):
@@ -238,29 +241,162 @@ class Scheduler(object):
         else:
             self._items.append(items)
 
+import curses
+from curses.textpad import Textbox, rectangle
+import os.path
+class Curse6p (object):
+    def __init__(self):
+        self._screen = curses.initscr()
+        curses.noecho()
+        curses.cbreak()
+        self._screen.keypad(True)
+
+    def select_file(self):
+        message = ""
+        while True:
+            self._screen.clear()
+
+            if message != "":
+                self._screen.addstr(1, 0, "(" + message + " is not a file, try again.)")
+
+            self._screen.addstr(0, 0, "Insert path to dictionary file (Ctrl+G to end input).")
+
+            editwin = curses.newwin(5, 30, 3, 1)
+            rectangle(self._screen, 2, 0, 2+5+1, 1+30+1)
+            self._screen.refresh()
+
+            box = Textbox(editwin)
+
+            # Let the user edit until Ctrl-G is struck.
+            box.edit()
+
+            # Get resulting contents
+            message = box.gather().strip()
+
+            if message == "":
+                return None
+
+            if os.path.isfile(message):
+                return message
+
+    def print_bar(self, todo, attempted, correct, percentage, grade):
+        self._screen.addstr(0, 0, "Attempted")
+        self._screen.addstr(0, 12, "Correct")
+        self._screen.addstr(0, 24, "To Do")
+        self._screen.addstr(0, 36, "Percentage")
+        self._screen.addstr(0, 48, "Grade")
+
+        self._screen.addstr(1, 0, str(attempted))
+        self._screen.addstr(1, 12, str(correct))
+        self._screen.addstr(1, 24, str(todo))
+        self._screen.addstr(1, 36, str(percentage) + "%" if percentage != float("inf") else "None")
+        self._screen.addstr(1, 48, str(grade))
+
+
+    def print_question(self, item):
+        self._screen.addstr(4, 0, item.question)
+        if SHOW_HINTS and item.hint:
+            self._screen.addstr(5, 0, "Hint: " + item.hint)
+
+    def get_answer(self):
+        editwin = curses.newwin(5, 60, 8, 1)
+        rectangle(self._screen, 7, 0, 7+5+1, 1+60+1)
+
+        self._screen.addstr(7, 2, "Answer:")
+        self._screen.addstr(7, 53, "[Ctrl+G]")
+
+        self._screen.refresh()
+
+        box = Textbox(editwin)
+
+        # Let the user edit until Ctrl-G is struck.
+        box.edit()
+
+        # Get resulting contents
+        message = box.gather().strip()
+
+        return message
+
+
+    def print_result(self, answer, item, correct):
+        if correct:
+            self._screen.addstr(15, 0, "CORRECT")
+        else:
+            self._screen.addstr(15, 0, "INCORRECT")
+            if SHOW_ANSWERS_ON_FAIL:
+                self._screen.addstr(16, 0, "Possible answers:")
+                index = 0
+                for answer in item.answers:
+                    self._screen.addstr(16 + index, 20, answer)
+                    index += 1
+
+        if SHOW_HINTS and item.hint:
+            self._screen.addstr(5, 0, "Hint: " + item.hint)
+
+    def run(self):
+        path = "exercises/exercise1.6p" #self.select_file()
+
+        items = read_test_file(path)
+
+        scheduler = Scheduler(items)
+
+        while scheduler.todo > 0:
+            self._screen.clear()
+            self.print_bar(todo=scheduler.todo, attempted=scheduler.attempted, correct=scheduler.correct,
+                           percentage=scheduler.percentage_correct, grade=scheduler.grade)
+            self.print_question(scheduler.current_item)
+            answer = self.get_answer()
+            correct = scheduler.current_item.matches(answer)
+            self.print_result(answer=answer, item=scheduler.current_item, correct=correct)
+
+            if correct:
+                 scheduler.next_item()
+            else:
+                 scheduler.cycle_item()
+
+            self.print_bar(todo=scheduler.todo, attempted=scheduler.attempted, correct=scheduler.correct,
+            percentage=scheduler.percentage_correct, grade=scheduler.grade)
+
+            # Wait for a key
+            self._screen.getch()
+
+    def stop(self):
+        curses.nocbreak()
+        self._screen.keypad(False)
+        curses.echo()
+        curses.endwin()
+
+
+
+
 # Starts from here.
 if __name__ == '__main__':
-    items = read_test_file("exercises/exercise1.6p")
+    app = Curse6p()
+    app.run()
 
-    print([str(item) for item in items])
+    app.stop()
 
-    scheduler = Scheduler(items)
-
-    items = read_test_file("exercises/exercise2.6p")
-
-    scheduler.append(items)
-
-    print([str(item) for item in items])
-    print([str(item.clean_answers) for item in items])
-    print([item.matchesPerfectly("answer answer") for item in items])
-    print([item.matches("answer answer") for item in items])
-    print([item.matches("are not we all") for item in items])
-
-    import random
-    while scheduler.todo > 0:
-        correct = random.choice((True, False))
-        print(scheduler.todo, scheduler.attempted, scheduler.correct, str(scheduler.percentage_correct)+"%", scheduler.grade, correct, scheduler.current_item)
-        if correct:
-            scheduler.next_item()
-        else:
-            scheduler.cycle_item()
+    # items = read_test_file("exercises/exercise1.6p")
+    #
+    # print([str(item) for item in items])
+    #
+    # scheduler = Scheduler(items)
+    #
+    # items = read_test_file("exercises/exercise2.6p")
+    #
+    # scheduler.append(items)
+    #
+    # print([str(item) for item in items])
+    # print([str(item.clean_answers) for item in items])
+    # print([item.matchesPerfectly("answer answer") for item in items])
+    # print([item.matches("answer answer") for item in items])
+    # print([item.matches("are not we all") for item in items])
+    #
+    # import random
+    # while scheduler.todo > 0:
+    #     correct = random.choice((True, False))
+    #     print(scheduler.todo, scheduler.attempted, scheduler.correct, str(scheduler.percentage_correct)+"%", scheduler.grade, correct, scheduler.current_item)
+    #     if correct:
+    #         scheduler.next_item()
+    #     else:
+    #         scheduler.cycle_item()
