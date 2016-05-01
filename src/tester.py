@@ -18,6 +18,15 @@ IGNORE_CASE = True
 REMOVE_FROM_ANSWERS = [ "?", "!", ",", ".", ";", ":" ]
 REWRITE_RULES = { "isn't": "is not", "aren't": "are not" }
 
+GRADE_SCALE = {
+    range(0,  49):  2.0,
+    range(50, 59):  3.0,
+    range(60, 69):  3.5,
+    range(70, 79):  4.0,
+    range(80, 89):  4.5,
+    range(90, 100): 5.0,
+}
+
 
 class Item(object):
     def __init__(self, question, answers, hint, comment, type):
@@ -152,6 +161,8 @@ def read_test_file(path):
 
     return items
 
+class GradeException (Exception): pass
+
 class Scheduler(object):
     def __init__(self, items=[]):
         self._items = items
@@ -171,6 +182,27 @@ class Scheduler(object):
         return len(self._items)
 
     @property
+    def percentage_correct(self):
+        if self.attempted > 0:
+            return int(100 * (float(self.correct) / float(self.attempted)))
+        else:
+            return float("inf")
+
+    @property
+    def grade(self):
+        percentage_correct = self.percentage_correct
+
+        if percentage_correct == float("inf"):
+            return None
+
+        for range, grade in GRADE_SCALE.items():
+            if percentage_correct in range:
+                return grade
+
+        raise GradeException("Value of " + str(percentage_correct) +
+                             " not in range of grade scale " + str(GRADE_SCALE))
+
+    @property
     def current_item(self):
         return self._items[0] if self._items else None
 
@@ -186,7 +218,7 @@ class Scheduler(object):
 
         return self.current_item
 
-    def cycle_item(self, correct=True):
+    def cycle_item(self, correct=False):
         if not self._items:
             return None
 
@@ -212,7 +244,11 @@ if __name__ == '__main__':
 
     print([str(item) for item in items])
 
+    scheduler = Scheduler(items)
+
     items = read_test_file("exercises/exercise2.6p")
+
+    scheduler.append(items)
 
     print([str(item) for item in items])
     print([str(item.clean_answers) for item in items])
@@ -220,3 +256,11 @@ if __name__ == '__main__':
     print([item.matches("answer answer") for item in items])
     print([item.matches("are not we all") for item in items])
 
+    import random
+    while scheduler.todo > 0:
+        correct = random.choice((True, False))
+        print(scheduler.todo, scheduler.attempted, scheduler.correct, str(scheduler.percentage_correct)+"%", scheduler.grade, correct, scheduler.current_item)
+        if correct:
+            scheduler.next_item()
+        else:
+            scheduler.cycle_item()
