@@ -61,7 +61,7 @@ class Item(object):
     def _rewrite(self, string):
         rewritten_string = string
         for before, after in REWRITE_RULES.items():
-            rewritten_string.replace(before, after)
+            rewritten_string = rewritten_string.replace(before, after)
         return rewritten_string
 
     def matches(self, string):
@@ -70,7 +70,6 @@ class Item(object):
             if clean_answer == clean_string:
                 return True
         return False
-
 
     def matchesPerfectly(self, string):
         for answer in self.answers:
@@ -165,4 +164,5 @@ if __name__ == '__main__':
     print([str(item.clean_answers) for item in items])
     print([item.matchesPerfectly("answer answer") for item in items])
     print([item.matches("answer answer") for item in items])
+    print([item.matches("are not we all") for item in items])
 
