@@ -430,7 +430,7 @@ class StatusBar (object):
         return self._display([
             ("Attempted", str(scheduler.attempted)), ("To do", str(scheduler.todo)),
             ("Correct", str(scheduler.correct)), ("Incorrect", str(scheduler.incorrect)),
-            ("Percentage", str(scheduler.percentage_correct) if scheduler.percentage_correct != None else ""),
+            ("Percentage", str(scheduler.percentage_correct) + "%" if scheduler.percentage_correct != None else ""),
             ("Grade", str(scheduler.grade) if scheduler.grade != None else "")
         ])
 
@@ -438,7 +438,7 @@ class StatusBar (object):
         return self._display([
             ("Attempted", str(attempted)), ("To do", str(todo)),
             ("Correct", str(correct)), ("Incorrect", str(incorrect)),
-            ("Percentage", str(percentage) if percentage != None else ""),
+            ("Percentage", str(percentage) + "%" if percentage != None else ""),
             ("Grade", str(grade) if grade != None else "")
         ])
         
