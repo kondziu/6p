@@ -229,7 +229,7 @@ class StatusBar (object):
         self._window.getkey()
 
 
-class App6p (object):
+class Cli6p (object):
     def __init__(self):
         pass
 
