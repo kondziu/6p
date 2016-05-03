@@ -228,6 +228,153 @@ class StatusBar (object):
     def wait(self):
         self._window.getkey()
 
+from os import listdir
+import os.path
+from os.path import isfile, isdir, join, abspath
+
+class FilePicker (object):
+    def __init__(self, height, width, y, x):
+        self._width = width
+        self._height = height
+        self._x = x
+        self._y = y
+
+        self._window = curses.newwin(height, width, y, x)
+
+        self._path = "."
+
+        # self._selector_border = curses.newwin(height - 2, width - 2, y + 1, x + 1)
+        # self._selector_window = curses.newwin(height - 5, width - 4, y + 3, x + 2)
+
+    def select(self, path=None):
+        if path == None:
+            path = self._path
+        assert (isdir(path))
+        return self._display(path)
+
+
+    def _display(self, starting_path):
+        self._window.clear()
+        self._window.border()
+
+        def fill_to(width, string):
+            return string + (" " * (width - len(string)))
+
+        def shorten(width, string):
+            return textwrap.shorten(string, width, placeholder="...")
+
+        def display_item(highlight, row, column, name):
+            display_name = fill_to(column_width - 1, shorten(column_width - 1, name))
+            if highlight:
+                self._window.addstr(row + 1, column * column_width + 1, display_name, curses.A_REVERSE)
+            else:
+                self._window.addstr(row + 1, column * column_width + 1, display_name)
+
+        path = abspath(starting_path)
+        position = (0, 0)
+
+        columns = 4
+        column_width = int((self._width - 2) / columns)
+
+
+        def next_column_and_row(column, row):
+            new_column, new_row = column, row
+            new_column += 1
+            if new_column >= columns:
+                new_column = 0
+                new_row += 1
+            return (new_column, new_row)
+
+        while True:
+            self._window.addstr(0, 1, "[%s]" % path)
+
+            all_files = listdir(path)
+
+            directories = [ dir for dir in all_files if isdir(dir) ]
+            directories.sort()
+            directories = [".."] + directories
+
+            files = [ file for file in all_files if not isdir(file) ]
+            files.sort()
+
+            items = len(directories) + len(files)
+
+            column = 0
+            row = 0
+
+            for dir in directories:
+                display_item((column, row) == position, row, column, dir + os.path.sep)
+                column, row = next_column_and_row(column, row)
+
+            for file in files:
+                display_item((column, row) == position, row, column, file)
+                last_position = (column, row)
+                column, row = next_column_and_row(column, row)
+
+            def safe_operation(columns, rows):
+                if columns + rows > items:
+                    return last_position
+                return (columns, rows)
+
+            self._window.refresh()
+
+            #self._window.nodelay(True)
+            key = self._window.getch()
+
+            self._window.addstr(self._height-1, 1, str(key) + str(curses.KEY_RIGHT))
+
+            #self._window.nodelay(True)
+            #key = self._window.getch()
+
+
+
+
+
+
+            if curses.KEY_LEFT == key:
+                self._window.addstr(self._height-2, 1, "left")
+                position = safe_operation((position[0] - 1) % columns, position[1])
+            elif curses.KEY_RIGHT == key:
+                self._window.addstr(self._height-2, 1, "right")
+                position = safe_operation((position[0] + 1) % columns, position[1])
+            elif curses.KEY_UP == key:
+                self._window.addstr(self._height-2, 1, "up")
+                position = safe_operation(position[0], (position[1] - 1) % last_position[1] + 1)
+            elif curses.KEY_DOWN == key:
+                self._window.addstr(self._height-2, 1, "down")
+                position = safe_operation(position[0], (position[1] + 1) % last_position[1] + 1)
+            elif curses.KEY_ENTER == key:
+                return # TODO
+            # elif key == 27: # ALT or ESC
+            #     if self._window.getch() == -1: # ESC
+            #         return None
+
+            self._window.nodelay(False)
+
+
+
+
+
+
+            # index = 0
+            # for key, value in values:
+            #     column_position = 1 + column_width * index
+            #
+            #     if index:
+            #         self._window.addstr(0, column_position - 1, "┬")
+            #         self._window.addstr(1, column_position - 1, "│")
+            #         self._window.addstr(2, column_position - 1, "┴")
+            #
+            #     printable_key = "[%s]" % key[0:column_width - 2 - 0]
+            #     printable_value = value[0:column_width - 2 - 1]
+            #
+            #     self._window.addstr(0, column_position + 0, printable_key)
+            #     self._window.addstr(1, column_position + 1, printable_value)
+            #
+            #     index += 1
+            #
+            # self._window.refresh()
+
 
 class Cli6p (object):
     def __init__(self):
@@ -235,30 +382,48 @@ class Cli6p (object):
 
     def start(self):
         def run(screen):
+            self._max_width = curses.COLS - 1
+            self._max_height = curses.LINES - 1
             self._screen = screen
             curses.curs_set(False)
+            curses.KEYPAD(1)
             self.run()
 
         curses.wrapper(run)
 
+    def _pick_file(self):
+        file_picker = FilePicker(width=self._max_width, height=self._max_height, x=0, y=0)
+
+        while True:
+            path = file_picker.select() #"exercises/exercise1.sixpence" #self.select_file()
+
+            if path:
+                return path
+            else:
+                pass # TODO dialogue box
+
 
     def run(self):
         # Init components
-        max_width = curses.COLS - 1
 
-        self.status_bar = StatusBar(x=0, y=0, width=max_width) # smallest possible width is no of fiels * 5-ish
-        self.question_area = QuestionArea(x=0, y=4,width=max_width, height=10) # smallest possible height is 3
-        self.answer_area = AnswerArea(x=0, y=15,width=max_width, height=5) # smallest possible height is 3
-        self.result_area = ResultArea(x=0, y=21,width=max_width, height=10) # smallest possible height is 6, width is like 5-ish
+
+        self.status_bar = StatusBar(x=0, y=0, width=self._max_width) # smallest possible width is no of fiels * 5-ish
+        self.question_area = QuestionArea(x=0, y=4,width=self._max_width, height=10) # smallest possible height is 3
+        self.answer_area = AnswerArea(x=0, y=15,width=self._max_width, height=5) # smallest possible height is 3
+        self.result_area = ResultArea(x=0, y=21,width=self._max_width, height=10) # smallest possible height is 6, width is like 5-ish
+
+
+        path = self._pick_file()
 
         self.status_bar.empty()
         self.question_area.empty()
         self.answer_area.empty()
         self.result_area.empty()
 
-        path = "exercises/exercise1.sixpence" #self.select_file()
+
         items = read_test_file(path)
         scheduler = Scheduler(items)
+
 
         while scheduler.todo > 0:
 
