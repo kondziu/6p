@@ -237,7 +237,9 @@ class FilePicker (object):
         self._height = height
         self._x = x
         self._y = y
+
         self._columns = 4
+        self._column_width = int((self._width - 2) / self._columns)
 
         self._window = curses.newwin(height, width, y, x)
         self._window.keypad(1)
@@ -255,8 +257,6 @@ class FilePicker (object):
 
 
     def _display(self, starting_path):
-        self._window.clear()
-        self._window.border()
 
         def fill_to(width, string):
             return string + (" " * (width - len(string)))
@@ -264,17 +264,31 @@ class FilePicker (object):
         def shorten(width, string):
             return textwrap.shorten(string, width, placeholder="...")
 
+        def list_files(path):
+            all_files = listdir(path)
+
+            directories = [ (dir, True) for dir in all_files if isdir(join(path, dir)) ]
+            directories.sort()
+            directories = [ ("..", True) ] + directories
+
+            files = [ (file, False) for file in all_files if not isdir(join(path, file)) ]
+            files.sort()
+
+            items = directories + files
+
+            return [items[i:i+self._columns] for i in range(0, len(items), self._columns)]
+
         def display_item(highlight, row, column, name):
-            display_name = fill_to(column_width - 1, shorten(column_width - 1, name))
+            display_name = fill_to(self._column_width - 1, shorten(self._column_width - 1, name))
             if highlight:
-                self._window.addstr(row + 1, column * column_width + 1, display_name, curses.A_REVERSE)
+                self._window.addstr(row + 1, column * self._column_width + 1, display_name, curses.A_REVERSE)
             else:
-                self._window.addstr(row + 1, column * column_width + 1, display_name)
+                self._window.addstr(row + 1, column * self._column_width + 1, display_name)
 
-        path = abspath(starting_path)
-        position = (0, 0)
+        def handle_input():
+            pass
 
-        column_width = int((self._width - 2) / self._columns)
+            self._window.addstr(self._height-1, 20, str(key) + " " + str(curses.KEY_ENTER) + "        ")
 
         def move_horizontal(direction, position, last_position):
             module = (self._columns if position[1] < last_position[1] else (last_position[0] + 1))
@@ -285,66 +299,79 @@ class FilePicker (object):
             row = (position[1] + direction) % (last_position[1] + (1 if position[0] <= last_position[0] else 0))
             return (position[0], row)
 
-        def next_column_and_row(column, row):
-            new_column, new_row = column, row
-            new_column += 1
-            if new_column >= self._columns:
-                new_column = 0
-                new_row += 1
-            return new_column, new_row
+        fresh = False
+        path = abspath(starting_path)
 
         while True:
-            self._window.addstr(0, 1, "[%s]" % path)
+            if not fresh:
+                self._window.clear()
+                self._window.border()
 
-            all_files = listdir(path)
+                self._window.addstr(0, 1, "[%s/]" % path)
 
-            directories = [ dir for dir in all_files if isdir(dir) ]
-            directories.sort()
-            directories = [".."] + directories
+                grid = list_files(path)
+                last_row = len(grid) - 1
+                last_column_in_last_row = len(grid[last_row]) - 1
 
-            files = [ file for file in all_files if not isdir(file) ]
-            files.sort()
+                position = (0, 0)
+                fresh = True
 
-            items = len(directories) + len(files)
-
-            column = 0
-            row = 0
-
-            for dir in directories:
-                display_item((column, row) == position, row, column, dir + os.path.sep)
-                column, row = next_column_and_row(column, row)
-
-            for file in files:
-                display_item((column, row) == position, row, column, file)
-                last_position = (column, row)
-                column, row = next_column_and_row(column, row)
+            for i, row in enumerate(grid):
+                for j, cell in enumerate(row):
+                    file, is_dir = cell
+                    highlight = (j, i) == position
+                    display_item(highlight=highlight, row=i, column=j, name=(file + "/") if is_dir else file)
 
             self._window.refresh()
 
             key = self._window.getch()
 
-            if curses.KEY_LEFT == key:
-                self._window.addstr(self._height-2, 1, "left   ")
-                position = move_horizontal(-1, position, last_position)
-            elif curses.KEY_RIGHT == key:
-                self._window.addstr(self._height-2, 1, "right  ")
-                position = move_horizontal(+1, position, last_position)
-            elif curses.KEY_UP == key:
-                self._window.addstr(self._height-2, 1, "up     ")
-                position = move_vertical(-1, position, last_position)
-            elif curses.KEY_DOWN == key:
-                self._window.addstr(self._height-2, 1, "down   ")
-                position = move_vertical(+1, position, last_position)
-            elif 10 == key: # ENTER
-                self._window.addstr(self._height-2, 1, "enter   ")
-                path = path.join()
-                #return # TODO
+            self._window.addstr(self._height - 1, 1,str(key) + "   ")
 
-            self._window.addstr(self._height-1, 20, str(key) + " " + str(curses.KEY_ENTER) + "        ")
+            if curses.KEY_LEFT == key:
+                position = move_horizontal(-1, position, (last_column_in_last_row, last_row))
+
+            elif curses.KEY_RIGHT == key:
+                position = move_horizontal(+1, position, (last_column_in_last_row, last_row))
+
+            elif curses.KEY_UP == key:
+                position = move_vertical(-1, position, (last_column_in_last_row, last_row))
+
+            elif curses.KEY_DOWN == key:
+                position = move_vertical(+1, position, (last_column_in_last_row, last_row))
+
+            elif 10 == key: # ENTER
+                file, is_dir = grid[position[1]][position[0]]
+                file_path = abspath(join(path, file))
+
+                if is_dir:
+                    path = file_path
+                    fresh = False
+
+                else:
+                    self._window.clear()
+                    self._window.refresh()
+
+                    return file_path
 
             # elif key == 27: # ALT or ESC
-            #     if self._window.getch() == -1: # ESC
-            #         return None
+            #     self._window.addstr(self._height - 1, 1,":" + str(key) + "  ")
+            #
+            #     self._window.nodelay(True)
+            #
+            #     kk = self._window.getch()
+            #     if kk == -1: # ESC
+            #        #self._window.clear()
+            #        #self._window.refresh()
+            #
+            #        #self._window.nodelay(False)
+            #        pass
+            #        self._window.addstr(self._height - 1, 30,":::" + str(kk) + "  ")
+            #        return None
+            #
+            #     self._window.addstr(self._height - 1, 20,"::" + str(kk) + "  ")
+            #
+            #     self._window.nodelay(False)
 
 
 class Cli6p (object):
