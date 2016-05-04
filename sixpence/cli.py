@@ -72,7 +72,6 @@ class ResultArea (object):
                 self._answers_window.refresh()
 
 
-
     def wait(self):
         self._message_window.getkey()
 
@@ -233,13 +232,15 @@ import os.path
 from os.path import isfile, isdir, join, abspath
 
 class FilePicker (object):
-    def __init__(self, height, width, y, x):
+    def __init__(self, height, width, y, x, columns=4):
         self._width = width
         self._height = height
         self._x = x
         self._y = y
+        self._columns = 4
 
         self._window = curses.newwin(height, width, y, x)
+        self._window.keypad(1)
 
         self._path = "."
 
@@ -273,17 +274,24 @@ class FilePicker (object):
         path = abspath(starting_path)
         position = (0, 0)
 
-        columns = 4
-        column_width = int((self._width - 2) / columns)
+        column_width = int((self._width - 2) / self._columns)
 
+        def move_horizontal(direction, position, last_position):
+            module = (self._columns if position[1] < last_position[1] else (last_position[0] + 1))
+            column = (position[0] + direction) % module
+            return (column, position[1])
+
+        def move_vertical(direction, position, last_position):
+            row = (position[1] + direction) % (last_position[1] + (1 if position[0] <= last_position[0] else 0))
+            return (position[0], row)
 
         def next_column_and_row(column, row):
             new_column, new_row = column, row
             new_column += 1
-            if new_column >= columns:
+            if new_column >= self._columns:
                 new_column = 0
                 new_row += 1
-            return (new_column, new_row)
+            return new_column, new_row
 
         while True:
             self._window.addstr(0, 1, "[%s]" % path)
@@ -311,69 +319,32 @@ class FilePicker (object):
                 last_position = (column, row)
                 column, row = next_column_and_row(column, row)
 
-            def safe_operation(columns, rows):
-                if columns + rows > items:
-                    return last_position
-                return (columns, rows)
-
             self._window.refresh()
 
-            #self._window.nodelay(True)
             key = self._window.getch()
 
-            self._window.addstr(self._height-1, 1, str(key) + str(curses.KEY_RIGHT))
-
-            #self._window.nodelay(True)
-            #key = self._window.getch()
-
-
-
-
-
-
             if curses.KEY_LEFT == key:
-                self._window.addstr(self._height-2, 1, "left")
-                position = safe_operation((position[0] - 1) % columns, position[1])
+                self._window.addstr(self._height-2, 1, "left   ")
+                position = move_horizontal(-1, position, last_position)
             elif curses.KEY_RIGHT == key:
-                self._window.addstr(self._height-2, 1, "right")
-                position = safe_operation((position[0] + 1) % columns, position[1])
+                self._window.addstr(self._height-2, 1, "right  ")
+                position = move_horizontal(+1, position, last_position)
             elif curses.KEY_UP == key:
-                self._window.addstr(self._height-2, 1, "up")
-                position = safe_operation(position[0], (position[1] - 1) % last_position[1] + 1)
+                self._window.addstr(self._height-2, 1, "up     ")
+                position = move_vertical(-1, position, last_position)
             elif curses.KEY_DOWN == key:
-                self._window.addstr(self._height-2, 1, "down")
-                position = safe_operation(position[0], (position[1] + 1) % last_position[1] + 1)
-            elif curses.KEY_ENTER == key:
-                return # TODO
+                self._window.addstr(self._height-2, 1, "down   ")
+                position = move_vertical(+1, position, last_position)
+            elif 10 == key: # ENTER
+                self._window.addstr(self._height-2, 1, "enter   ")
+                path = path.join()
+                #return # TODO
+
+            self._window.addstr(self._height-1, 20, str(key) + " " + str(curses.KEY_ENTER) + "        ")
+
             # elif key == 27: # ALT or ESC
             #     if self._window.getch() == -1: # ESC
             #         return None
-
-            self._window.nodelay(False)
-
-
-
-
-
-
-            # index = 0
-            # for key, value in values:
-            #     column_position = 1 + column_width * index
-            #
-            #     if index:
-            #         self._window.addstr(0, column_position - 1, "┬")
-            #         self._window.addstr(1, column_position - 1, "│")
-            #         self._window.addstr(2, column_position - 1, "┴")
-            #
-            #     printable_key = "[%s]" % key[0:column_width - 2 - 0]
-            #     printable_value = value[0:column_width - 2 - 1]
-            #
-            #     self._window.addstr(0, column_position + 0, printable_key)
-            #     self._window.addstr(1, column_position + 1, printable_value)
-            #
-            #     index += 1
-            #
-            # self._window.refresh()
 
 
 class Cli6p (object):
@@ -386,7 +357,6 @@ class Cli6p (object):
             self._max_height = curses.LINES - 1
             self._screen = screen
             curses.curs_set(False)
-            curses.KEYPAD(1)
             self.run()
 
         curses.wrapper(run)
